@@ -1,38 +1,22 @@
-from pydantic import BaseModel
-class Account(BaseModel):
-    sold: float = 0.0
-    userID: int
-    iban: str
-    name: str
+import db
 
-firstAccount = Account(userID=1, name='testAccount', sold=30000.0, iban='RO123456789')
-secondAccount = Account(userID=2, name='testAccount2', sold=2000.0, iban='RO987654321')
-thirdAccount = Account(userID=3, name='testAccount3', sold=1000.0, iban='RO123456789')
-
-accounts = [firstAccount, secondAccount, thirdAccount]
-
-# Add money function
-def addMoney(amount, account):
+def addMoney(amount: float, session: db.Session, user: db.User, account: db.Account):
     if (amount > 0):
         account.sold += amount
     else : 
         print("Invalid amount, must be superior to 0")
+    db.update_account(session, user, account)
     return account
 
-# Get function for account
 def getAccount(accounts, iban):
     for account in accounts:
         if account.iban == iban:
             return account
     return None
 
-
-# Transfer function
 def isTransferPossible(amount, firstAccount):
     return (firstAccount.sold > 0 and amount <= firstAccount.sold and amount > 0)
 
-
-# Transfer money function
 def transferMoney(amount, firstAccount, secondAccount):
     if (firstAccount.iban == secondAccount.iban):
         print("Invalid transfert, the accounts are the same")
@@ -47,12 +31,13 @@ def transferMoney(amount, firstAccount, secondAccount):
         print("This account isn't sold enough to make the transfer")
     return firstAccount, secondAccount
 
+# Actual code
+db.create_db_and_tables()
+session : db.Session = db.create_session()
+account = db.Account(name = "Dépôt", sold=120, userID=1, iban="0123456789012345678901234567890123")
+user = db.User(email="ez@gmail.com", password="test")
+session.add(account)
+session.add(user)
+session.commit()
 
-
-# firstAccount, secondAccount = transferMoney(20, firstAccount, firstAccount)
-print(f"firstAccount sold={firstAccount.sold} userID={firstAccount.userID} name='{firstAccount.name}'")
-# print(f"secondAccount sold={secondAccount.sold} userID={secondAccount.userID} name='{secondAccount.name}'")
-
-addMoney(-100, firstAccount)
-print(f"firstAccount sold={firstAccount.sold} userID={firstAccount.userID} name='{firstAccount.name}'")
-
+addMoney(100, session, user, account)
