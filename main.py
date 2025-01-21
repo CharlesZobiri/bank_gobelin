@@ -11,6 +11,13 @@ thirdAccount = Account(userID=3, name='testAccount3', sold=1000.0, iban='RO12345
 
 accounts = [firstAccount, secondAccount, thirdAccount]
 
+# Add money function
+def addMoney(amount, account):
+    if (amount > 0):
+        account.sold += amount
+    else : 
+        print("Invalid amount, must be superior to 0")
+    return account
 
 # Get function for account
 def getAccount(accounts, iban):
@@ -42,8 +49,10 @@ def transferMoney(amount, firstAccount, secondAccount):
 
 
 
-firstAccount, secondAccount = transferMoney(20, firstAccount, firstAccount)
+# firstAccount, secondAccount = transferMoney(20, firstAccount, firstAccount)
 print(f"firstAccount sold={firstAccount.sold} userID={firstAccount.userID} name='{firstAccount.name}'")
-print(f"secondAccount sold={secondAccount.sold} userID={secondAccount.userID} name='{secondAccount.name}'")
+# print(f"secondAccount sold={secondAccount.sold} userID={secondAccount.userID} name='{secondAccount.name}'")
 
+addMoney(-100, firstAccount)
+print(f"firstAccount sold={firstAccount.sold} userID={firstAccount.userID} name='{firstAccount.name}'")
 
