@@ -398,3 +398,10 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+#.env File
+.env
+
+#.venv Folder virtual environment
+.venv
+.venv/
