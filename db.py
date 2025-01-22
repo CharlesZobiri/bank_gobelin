@@ -4,12 +4,11 @@ from sqlmodel import Field, SQLModel, create_engine, Session, update
 class User(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True, max_length=255)
-    name: str = Field(max_length=69)
     password: str = Field(max_length=255)
 
 class Account(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    sold: float
+    sold: float = Field(default=0)
     userID: int = Field(foreign_key="user.id")
     iban: str = Field(max_length=34, unique=True, index=True)
     name: str = Field(index=True)

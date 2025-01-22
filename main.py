@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, constr
 from decimal import Decimal
 from fastapi import FastAPI, HTTPException, Depends
+import random
+import string
 
 app = FastAPI()
 
@@ -12,7 +14,6 @@ class UserBase(BaseModel):
     name : str
     email: EmailStr
     password: constr(min_length=8)
-
     class Config:
         from_attributes = True
 
@@ -25,33 +26,43 @@ class UserLogin(BaseModel):
         
 class AccountBase(BaseModel):
     name: str
-    sold: Decimal
+    sold: float
     iban: constr(min_length=34, max_length=34)
 
     class Config:
         from_attributes = True
 
+class AccountCreate(BaseModel):
+    name: str
+    userID: int
+
+    class Config:
+        from_attributes = True
+
 class DepositBase(BaseModel):
-    sold: Decimal
+    sold: float
+    name: str
+    userID: int
 
     class Config:
         from_attributes = True
 
 class TransferBase(BaseModel):
-    sold: Decimal
+    sold: float
 
     class Config:
         from_attributes = True
 
 def addMoney(amount: float, session: Session, account: db.Account):
     if amount > 0:
-        new_sold = account.sold + amount
-        account_data = AccountBase(name=account.name, sold=new_sold, iban=account.iban)
-        account.sold = account_data.sold
+        account.sold = account.sold + amount
+        depotData = db.Deposit(sold=amount, userID=account.userID, accountID=account.id)
+        session.add(depotData)
+        session.add(account)
         session.commit()
+        
     else:
         print("Invalid amount, must be superior to 0")
-    return account
 
 def getAccount(session: Session, iban: str):
     account_query = select(db.Account).where(db.Account.iban == iban)
@@ -89,42 +100,6 @@ db.create_db_and_tables()
 session = db.create_session()
 
 
-
-
-# user_query = select(db.User).where(db.User.email == "ez@gmail.com")
-# user = session.scalars(user_query).first()
-# if not user:
-#     user_data = UserBase(name ="henri",email="ez@gmail.com", password="testpassword")
-#     user = db.User(name=user_data.name, email=user_data.email, password=user_data.password)
-#     session.add(user)
-
-# account_query = select(db.Account).where(db.Account.iban == "0123456789012345678901234567890123")
-# account = session.scalars(account_query).first()
-# if not account:
-#     account_data = AccountBase(name="Dépôt", sold=120, iban="0123456789012345678901234567890123")
-#     account = db.Account(name=account_data.name, sold=account_data.sold, userID=user.id, iban=account_data.iban)
-#     session.add(account)
-
-# session.commit()
-
-# addMoney(100, session, account)
-# print(f"Account balance after adding money: {account.sold}")
-
-# secondIban = "9876543210987654321098765432109876"
-# second_account = getAccount(session, secondIban)
-# if not second_account:
-#     second_account_data = AccountBase(name="Épargne", sold=0, iban=secondIban)
-#     second_account = db.Account(name=second_account_data.name, sold=second_account_data.sold, userID=user.id, iban=second_account_data.iban)
-#     session.add(second_account)
-#     session.commit()
-
-# secondIban = "9876543210987654321098765432109876"
-# transferMoney(session, 50, account, secondIban)
-# second_account = getAccount(session, secondIban)
-# print(f"First account balance after transfer: {account.sold}")
-# print(f"Second account balance after transfer: {second_account.sold if second_account else 'N/A'}")
-
-
 @app.get("/users/{user_id}")
 def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
     user = db_session.query(db.User.name, db.User.email).filter(db.User.id == user_id).first()
@@ -155,3 +130,58 @@ def user_login(body: UserLogin, db_session: Session = Depends(db.get_db)):
     if not user_exists:
         return {"error": "Invalid credentials"}
     return {"message": "User logged in"}
+
+
+def generate_unique_iban(db_session: Session):
+    while True:
+        iban = ''.join(random.choices(string.digits, k=34))
+        account_query = db_session.query(db.Account).where(db.Account.iban == iban)
+        account_exists = session.scalars(account_query).first()
+        if not account_exists:
+            return iban
+        
+
+@app.post("/account/create")
+def account_create(body: AccountCreate, db_session: Session = Depends(db.get_db)):
+    user_query = db_session.query(db.User).where(db.User.id == body.userID)
+    user_exists = session.scalars(user_query).first()
+    if not user_exists:
+        return {"error": "User does not exist"}  
+      
+    account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
+    account_exists = session.scalars(account_query).first()
+    if account_exists:
+        return {"error": "Account name already exists for this user"}
+
+    newIban = generate_unique_iban(db_session)
+    account_data = AccountBase(name=body.name, sold=0, iban=newIban)
+    account = db.Account(name=account_data.name, sold=account_data.sold, userID=body.userID, iban=account_data.iban)
+    session.add(account)
+    session.commit()
+    return {"message": "Account Opened"}
+
+
+@app.post("/account/infos")
+def account_get(body: AccountCreate, db_session: Session = Depends(db.get_db)):
+    account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
+    account = session.scalars(account_query).first()
+    if account is None:
+        return {"error": "Account not found"}
+
+    return {"name": account.name, "sold": account.sold, "iban": account.iban}
+
+
+
+@app.post("/account/deposit")
+def account_deposit(body: DepositBase, db_session: Session = Depends(db.get_db)):
+    account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
+    account = db_session.scalars(account_query).first()
+    if account is None:
+        return {"error": "Account not found"}
+
+    addMoney(body.sold, db_session, account)
+    return {"message": "Money added to account"}
+
+
+
+
