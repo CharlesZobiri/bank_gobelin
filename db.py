@@ -13,6 +13,7 @@ class Account(SQLModel, table=True):
     userID: int = Field(foreign_key="user.id")
     iban: str = Field(max_length=34, unique=True, index=True)
     name: str = Field(index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Deposit(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)

@@ -10,6 +10,8 @@ import string
 from datetime import datetime
 from sqlalchemy import select, literal, union
 from sqlalchemy.orm import Session, aliased
+from sqlalchemy import text
+
 
 app = FastAPI()
 
@@ -62,6 +64,9 @@ class TransferBase(BaseModel):
 
 class TransferLogBase(BaseModel):
     name : str
+    userID: int
+
+class AccountsRecup(BaseModel):
     userID: int
     
 
@@ -225,7 +230,6 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
     
     TargetAccount = aliased(db.Account)
     
-    # Query for transfers
     transfer_query = (
         select(
             db.Transfer.sold,
@@ -239,7 +243,6 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
         .where(db.Transfer.sourceAccountID == account.id)
     )
     
-    # Query for deposits
     deposit_query = (
         select(
             db.Deposit.sold,
@@ -252,10 +255,9 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
         .where(db.Deposit.accountID == account.id)
     )
     
-    # Combine and order the results
-    combined_query = union(transfer_query, deposit_query).order_by(db.Transfer.created_at.desc())
-    
+    combined_query = union(transfer_query, deposit_query)
     results = db_session.exec(combined_query).all()
+    sorted_results = sorted(results, key=lambda x: x.created_at, reverse=True)
     
     transaction_logs = [
         {
@@ -265,10 +267,22 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
             "to_account": result.target_account,
             "type": result.type
         }
-        for result in results
+        for result in sorted_results
     ]
     
     return {
         "account_name": account.name,
         "transactions": transaction_logs
     }
+
+@app.post("/accounts/")
+def accounts_get(body: AccountsRecup, db_session: Session = Depends(db.get_db)):
+    user_query = db_session.query(db.User).where(db.User.id == body.userID)
+    user = db_session.scalars(user_query).first()
+    if user is None:
+        return {"error": "User does not exist"}
+    
+    account_query = db_session.query(db.Account).where(db.Account.userID == body.userID)
+    accounts = db_session.scalars(account_query).all()
+    
+    return {"accounts": [{"name": account.name, "sold": account.sold, "iban": account.iban, "date": account.created_at} for account in accounts]}
