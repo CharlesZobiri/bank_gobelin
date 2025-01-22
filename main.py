@@ -49,6 +49,9 @@ class DepositBase(BaseModel):
 
 class TransferBase(BaseModel):
     sold: float
+    name: str
+    iban: str
+    userID: int
 
     class Config:
         from_attributes = True
@@ -71,30 +74,25 @@ def getAccount(session: Session, iban: str):
 def isTransferPossible(amount: float, firstAccount: db.Account):
     return firstAccount.sold > 0 and amount <= firstAccount.sold and amount > 0
 
-def transferMoney(session: Session, amount: float, firstAccount: db.Account, secondIban: str):
-    if firstAccount.iban == secondIban:
-        print("Invalid transfer, the accounts are the same")
-        return firstAccount, None
+def transferMoney(session: Session, amount: float, sourceAccount: db.Account, targetIban: str):
+    if sourceAccount.iban == targetIban:
+        return("Invalid transfer, the accounts are the same")
+    if amount <= 0:
+        return("Invalid amount, must be superior to 0")
+
+    targetAccount = getAccount(session, targetIban)
+    if targetAccount is None:
+        return("This IBAN does not exist")
     
-    secondAccount = getAccount(session, secondIban)
-    if secondAccount is None:
-        print("The second account does not exist")
-        return firstAccount, None
-    
-    if isTransferPossible(amount, firstAccount):
-        new_sold_first = firstAccount.sold - amount
-        new_sold_second = secondAccount.sold + amount
-        
-        first_account_data = AccountBase(name=firstAccount.name, sold=new_sold_first, iban=firstAccount.iban)
-        second_account_data = AccountBase(name=secondAccount.name, sold=new_sold_second, iban=secondAccount.iban)
-        
-        firstAccount.sold = first_account_data.sold
-        secondAccount.sold = second_account_data.sold
+    if isTransferPossible(amount, sourceAccount):
+        sourceAccount.sold = sourceAccount.sold - amount
+        targetAccount.sold = targetAccount.sold + amount
+        transferData = db.Transfer(sold=amount, userID=sourceAccount.userID, sourceAccountID=sourceAccount.id, targetAccountID=targetAccount.id)
+        session.add(transferData)
         session.commit()
+        return("Transfer done")
     else:
-        print("This account isn't sold enough to make the transfer")
-    
-    return firstAccount, secondAccount
+        return("This account isn't sold enough to make the transfer")
 
 db.create_db_and_tables()
 session = db.create_session()
@@ -184,4 +182,25 @@ def account_deposit(body: DepositBase, db_session: Session = Depends(db.get_db))
 
 
 
+@app.get('/account/deposit_logs')
+def account_deposit_logs(body: AccountCreate, db_session: Session = Depends(db.get_db)):
+    account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
+    account = db_session.scalars(account_query).first()
+    if account is None:
+        return {"error": "Account not found"}
 
+    deposit_query = db_session.query(db.Deposit.sold, db.Account.name).join(db.Account, db.Deposit.accountID == db.Account.id).filter(db.Deposit.accountID == account.id)
+    deposits = db_session.scalars(deposit_query).all()
+    return {"account_name": account.name, "deposits": deposits}
+
+
+
+@app.post("/account/transfer")
+def account_transfer(body: TransferBase, db_session: Session = Depends(db.get_db)):
+    account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
+    account = db_session.scalars(account_query).first()
+    if account is None:
+        return {"error": "Account not found"}
+    
+    message = transferMoney(db_session, body.sold, account, body.iban)
+    return {"message": {message}}
