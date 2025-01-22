@@ -13,7 +13,7 @@ class Account(SQLModel, table=True):
     iban: str = Field(max_length=34, unique=True, index=True)
     name: str = Field(index=True)
 
-system("del database.db")
+system("del /Q database.db")
 sqlite_file_name = "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 connect_args = {"check_same_thread": False}
