@@ -4,6 +4,7 @@ from sqlmodel import Field, SQLModel, create_engine, Session, update
 class User(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True, max_length=255)
+    name: str = Field(max_length=69)
     password: str = Field(max_length=255)
 
 class Account(SQLModel, table=True):
@@ -26,7 +27,7 @@ class Transfer(SQLModel, table=True):
     sourceAccountID: int = Field(foreign_key="account.id")
     targetAccountID: int = Field(foreign_key="account.id")
 
-system("del /Q database.db")
+# system("del /Q database.db")
 sqlite_file_name = "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 connect_args = {"check_same_thread": False}
@@ -37,3 +38,10 @@ def create_session():
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
+
+def get_db():
+    session = create_session()
+    try:
+        yield session
+    finally:
+        session.close()

@@ -3,8 +3,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, constr
 from decimal import Decimal
+from fastapi import FastAPI, HTTPException, Depends
+
+app = FastAPI()
 
 class UserBase(BaseModel):
+    name : str
     email: EmailStr
     password: constr(min_length=8)
 
@@ -76,35 +80,44 @@ def transferMoney(session: Session, amount: float, firstAccount: db.Account, sec
 db.create_db_and_tables()
 session = db.create_session()
 
-user_query = select(db.User).where(db.User.email == "ez@gmail.com")
-user = session.scalars(user_query).first()
-if not user:
-    user_data = UserBase(email="ez@gmail.com", password="testpassword")
-    user = db.User(email=user_data.email, password=user_data.password)
-    session.add(user)
+@app.get("/users/{user_id}")
+def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
+    user = db_session.query(db.User.name, db.User.email).filter(db.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"name": user.name, "email": user.email}
 
-account_query = select(db.Account).where(db.Account.iban == "0123456789012345678901234567890123")
-account = session.scalars(account_query).first()
-if not account:
-    account_data = AccountBase(name="Dépôt", sold=120, iban="0123456789012345678901234567890123")
-    account = db.Account(name=account_data.name, sold=account_data.sold, userID=user.id, iban=account_data.iban)
-    session.add(account)
 
-session.commit()
 
-addMoney(100, session, account)
-print(f"Account balance after adding money: {account.sold}")
+# user_query = select(db.User).where(db.User.email == "ez@gmail.com")
+# user = session.scalars(user_query).first()
+# if not user:
+#     user_data = UserBase(name ="henri",email="ez@gmail.com", password="testpassword")
+#     user = db.User(name=user_data.name, email=user_data.email, password=user_data.password)
+#     session.add(user)
 
-secondIban = "9876543210987654321098765432109876"
-second_account = getAccount(session, secondIban)
-if not second_account:
-    second_account_data = AccountBase(name="Épargne", sold=0, iban=secondIban)
-    second_account = db.Account(name=second_account_data.name, sold=second_account_data.sold, userID=user.id, iban=second_account_data.iban)
-    session.add(second_account)
-    session.commit()
+# account_query = select(db.Account).where(db.Account.iban == "0123456789012345678901234567890123")
+# account = session.scalars(account_query).first()
+# if not account:
+#     account_data = AccountBase(name="Dépôt", sold=120, iban="0123456789012345678901234567890123")
+#     account = db.Account(name=account_data.name, sold=account_data.sold, userID=user.id, iban=account_data.iban)
+#     session.add(account)
 
-secondIban = "9876543210987654321098765432109876"
-transferMoney(session, 50, account, secondIban)
-second_account = getAccount(session, secondIban)
-print(f"First account balance after transfer: {account.sold}")
-print(f"Second account balance after transfer: {second_account.sold if second_account else 'N/A'}")
+# session.commit()
+
+# addMoney(100, session, account)
+# print(f"Account balance after adding money: {account.sold}")
+
+# secondIban = "9876543210987654321098765432109876"
+# second_account = getAccount(session, secondIban)
+# if not second_account:
+#     second_account_data = AccountBase(name="Épargne", sold=0, iban=secondIban)
+#     second_account = db.Account(name=second_account_data.name, sold=second_account_data.sold, userID=user.id, iban=second_account_data.iban)
+#     session.add(second_account)
+#     session.commit()
+
+# secondIban = "9876543210987654321098765432109876"
+# transferMoney(session, 50, account, secondIban)
+# second_account = getAccount(session, secondIban)
+# print(f"First account balance after transfer: {account.sold}")
+# print(f"Second account balance after transfer: {second_account.sold if second_account else 'N/A'}")
