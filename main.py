@@ -1,3 +1,4 @@
+import hashlib
 import db
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +10,13 @@ app = FastAPI()
 
 class UserBase(BaseModel):
     name : str
+    email: EmailStr
+    password: constr(min_length=8)
+
+    class Config:
+        from_attributes = True
+
+class UserLogin(BaseModel):
     email: EmailStr
     password: constr(min_length=8)
 
@@ -80,12 +88,6 @@ def transferMoney(session: Session, amount: float, firstAccount: db.Account, sec
 db.create_db_and_tables()
 session = db.create_session()
 
-@app.get("/users/{user_id}")
-def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
-    user = db_session.query(db.User.name, db.User.email).filter(db.User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"name": user.name, "email": user.email}
 
 
 
@@ -121,3 +123,35 @@ def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
 # second_account = getAccount(session, secondIban)
 # print(f"First account balance after transfer: {account.sold}")
 # print(f"Second account balance after transfer: {second_account.sold if second_account else 'N/A'}")
+
+
+@app.get("/users/{user_id}")
+def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
+    user = db_session.query(db.User.name, db.User.email).filter(db.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"name": user.name, "email": user.email}
+
+
+@app.post("/auth/register")
+def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
+    user_query = db_session.query(db.User).where(db.User.email == body.email)
+    user_exists = session.scalars(user_query).first()
+    if user_exists:
+        return {"error": "User already exists"}
+    
+    hash_password = hashlib.sha256(body.password.encode()).hexdigest()
+    user = db.User(name= body.name, email=body.email, password=hash_password)
+    session.add(user)
+    session.commit()
+    return {"message": "User registered"}
+
+
+@app.post("/auth/login")
+def user_login(body: UserLogin, db_session: Session = Depends(db.get_db)):
+    hash_password=hashlib.sha256(body.password.encode()).hexdigest()
+    user_query = db_session.query(db.User).where(db.User.email == body.email, db.User.password == hash_password)
+    user_exists = session.scalars(user_query).first()
+    if not user_exists:
+        return {"error": "Invalid credentials"}
+    return {"message": "User logged in"}
