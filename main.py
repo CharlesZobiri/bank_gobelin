@@ -282,7 +282,7 @@ def accounts_get(body: AccountsRecup, db_session: Session = Depends(db.get_db)):
     if user is None:
         return {"error": "User does not exist"}
     
-    account_query = db_session.query(db.Account).where(db.Account.userID == body.userID)
+    account_query = db_session.query(db.Account).where(db.Account.userID == body.userID).order_by(db.Account.created_at.desc())
     accounts = db_session.scalars(account_query).all()
     
-    return {"accounts": [{"name": account.name, "sold": account.sold, "iban": account.iban, "date": account.created_at} for account in accounts]}
+    return {"accounts": [{"name": account.name, "sold": account.sold, "iban": account.iban, "date": account.created_at.isoformat()} for account in accounts]}
