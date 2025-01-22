@@ -8,7 +8,8 @@ from fastapi import FastAPI, HTTPException, Depends
 import random
 import string
 from datetime import datetime
-from sqlalchemy.orm import aliased
+from sqlalchemy import select, literal, union
+from sqlalchemy.orm import Session, aliased
 
 app = FastAPI()
 
@@ -60,8 +61,9 @@ class TransferBase(BaseModel):
 
 
 class TransferLogBase(BaseModel):
+    name : str
     userID: int
-    name: str
+    
 
 
 def addMoney(amount: float, session: Session, account: db.Account):
@@ -213,41 +215,60 @@ def account_transfer(body: TransferBase, db_session: Session = Depends(db.get_db
     return {"message": {message}}
 
 
-@app.post('/account/transfer_logs')
-def account_transfer_logs(body: TransferLogBase, db_session: Session = Depends(db.get_db)):
+@app.post('/account/transaction_logs')
+def account_transaction_logs(body: TransferLogBase, db_session: Session = Depends(db.get_db)):
     account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
     account = db_session.scalars(account_query).first()
     if account is None:
         return {"error": "Account not found"}
+
     
     TargetAccount = aliased(db.Account)
     
+    # Query for transfers
     transfer_query = (
-        db_session.query(
+        select(
             db.Transfer.sold,
             db.Transfer.created_at,
             db.Account.name.label('source_account'),
-            TargetAccount.name.label('target_account')
+            TargetAccount.name.label('target_account'),
+            literal('transfer').label('type')
         )
         .join(db.Account, db.Transfer.sourceAccountID == db.Account.id)
         .join(TargetAccount, db.Transfer.targetAccountID == TargetAccount.id)
-        .filter(db.Transfer.sourceAccountID == account.id)
-        .order_by(db.Transfer.created_at.desc())
+        .where(db.Transfer.sourceAccountID == account.id)
     )
     
-    transfers = transfer_query.all()
+    # Query for deposits
+    deposit_query = (
+        select(
+            db.Deposit.sold,
+            db.Deposit.created_at,
+            db.Account.name.label('source_account'),
+            literal(None).label('target_account'),
+            literal('deposit').label('type')
+        )
+        .join(db.Account, db.Deposit.accountID == db.Account.id)
+        .where(db.Deposit.accountID == account.id)
+    )
     
-    transfer_logs = [
+    # Combine and order the results
+    combined_query = union(transfer_query, deposit_query).order_by(db.Transfer.created_at.desc())
+    
+    results = db_session.exec(combined_query).all()
+    
+    transaction_logs = [
         {
-            "amount": transfer.sold,
-            "date": transfer.created_at.strftime("%Y-%m-%d %H:%M:%S") if transfer.created_at else None,
-            "from_account": transfer.source_account,
-            "to_account": transfer.target_account
+            "amount": result.sold,
+            "date": result.created_at.strftime("%Y-%m-%d %H:%M:%S") if result.created_at else None,
+            "from_account": result.source_account,
+            "to_account": result.target_account,
+            "type": result.type
         }
-        for transfer in transfers
+        for result in results
     ]
     
     return {
         "account_name": account.name,
-        "transfers": transfer_logs
+        "transactions": transaction_logs
     }

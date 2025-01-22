@@ -19,6 +19,7 @@ class Deposit(SQLModel, table=True):
     sold: float
     userID: int = Field(foreign_key="user.id")
     accountID: int = Field(foreign_key="account.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Transfer(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
