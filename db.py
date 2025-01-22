@@ -13,6 +13,19 @@ class Account(SQLModel, table=True):
     iban: str = Field(max_length=34, unique=True, index=True)
     name: str = Field(index=True)
 
+class Deposit(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    sold: float
+    userID: int = Field(foreign_key="user.id")
+    accountID: int = Field(foreign_key="account.id")
+
+class Transfer(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    sold: float
+    userID: int = Field(foreign_key="user.id")
+    sourceAccountID: int = Field(foreign_key="account.id")
+    targetAccountID: int = Field(foreign_key="account.id")
+
 system("del /Q database.db")
 sqlite_file_name = "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
@@ -24,8 +37,3 @@ def create_session():
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
-
-def update_account(session: Session, user: User, account: Account):
-    session.exec(update(Account).where(account.userID == user.id).values(sold=account.sold, userID=account.userID, iban=account.iban, name=account.name)) 
-    session.commit()
-    session.refresh(account)

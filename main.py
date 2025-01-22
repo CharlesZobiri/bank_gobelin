@@ -1,7 +1,7 @@
 import db
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr, constr, validator
+from pydantic import BaseModel, EmailStr, constr
 from decimal import Decimal
 
 class UserBase(BaseModel):
@@ -15,6 +15,18 @@ class AccountBase(BaseModel):
     name: str
     sold: Decimal
     iban: constr(min_length=34, max_length=34)
+
+    class Config:
+        from_attributes = True
+
+class DepositBase(BaseModel):
+    sold: Decimal
+
+    class Config:
+        from_attributes = True
+
+class TransferBase(BaseModel):
+    sold: Decimal
 
     class Config:
         from_attributes = True
