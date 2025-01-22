@@ -1,5 +1,6 @@
 from os import system
 from sqlmodel import Field, SQLModel, create_engine, Session, update
+from datetime import datetime
 
 class User(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -25,6 +26,7 @@ class Transfer(SQLModel, table=True):
     userID: int = Field(foreign_key="user.id")
     sourceAccountID: int = Field(foreign_key="account.id")
     targetAccountID: int = Field(foreign_key="account.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 # system("del /Q database.db")
 sqlite_file_name = "database.db"

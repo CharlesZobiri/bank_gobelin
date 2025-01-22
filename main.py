@@ -7,6 +7,8 @@ from decimal import Decimal
 from fastapi import FastAPI, HTTPException, Depends
 import random
 import string
+from datetime import datetime
+from sqlalchemy.orm import aliased
 
 app = FastAPI()
 
@@ -56,6 +58,12 @@ class TransferBase(BaseModel):
     class Config:
         from_attributes = True
 
+
+class TransferLogBase(BaseModel):
+    userID: int
+    name: str
+
+
 def addMoney(amount: float, session: Session, account: db.Account):
     if amount > 0:
         account.sold = account.sold + amount
@@ -97,7 +105,6 @@ def transferMoney(session: Session, amount: float, sourceAccount: db.Account, ta
 db.create_db_and_tables()
 session = db.create_session()
 
-
 @app.get("/users/{user_id}")
 def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
     user = db_session.query(db.User.name, db.User.email).filter(db.User.id == user_id).first()
@@ -109,7 +116,7 @@ def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
 @app.post("/auth/register")
 def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
     user_query = db_session.query(db.User).where(db.User.email == body.email)
-    user_exists = session.scalars(user_query).first()
+    user_exists = db_session.scalars(user_query).first()
     if user_exists:
         return {"error": "User already exists"}
     
@@ -124,7 +131,7 @@ def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
 def user_login(body: UserLogin, db_session: Session = Depends(db.get_db)):
     hash_password=hashlib.sha256(body.password.encode()).hexdigest()
     user_query = db_session.query(db.User).where(db.User.email == body.email, db.User.password == hash_password)
-    user_exists = session.scalars(user_query).first()
+    user_exists = db_session.scalars(user_query).first()
     if not user_exists:
         return {"error": "Invalid credentials"}
     return {"message": "User logged in"}
@@ -204,3 +211,43 @@ def account_transfer(body: TransferBase, db_session: Session = Depends(db.get_db
     
     message = transferMoney(db_session, body.sold, account, body.iban)
     return {"message": {message}}
+
+
+@app.post('/account/transfer_logs')
+def account_transfer_logs(body: TransferLogBase, db_session: Session = Depends(db.get_db)):
+    account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
+    account = db_session.scalars(account_query).first()
+    if account is None:
+        return {"error": "Account not found"}
+    
+    TargetAccount = aliased(db.Account)
+    
+    transfer_query = (
+        db_session.query(
+            db.Transfer.sold,
+            db.Transfer.created_at,
+            db.Account.name.label('source_account'),
+            TargetAccount.name.label('target_account')
+        )
+        .join(db.Account, db.Transfer.sourceAccountID == db.Account.id)
+        .join(TargetAccount, db.Transfer.targetAccountID == TargetAccount.id)
+        .filter(db.Transfer.sourceAccountID == account.id)
+        .order_by(db.Transfer.created_at.desc())
+    )
+    
+    transfers = transfer_query.all()
+    
+    transfer_logs = [
+        {
+            "amount": transfer.sold,
+            "date": transfer.created_at.strftime("%Y-%m-%d %H:%M:%S") if transfer.created_at else None,
+            "from_account": transfer.source_account,
+            "to_account": transfer.target_account
+        }
+        for transfer in transfers
+    ]
+    
+    return {
+        "account_name": account.name,
+        "transfers": transfer_logs
+    }
