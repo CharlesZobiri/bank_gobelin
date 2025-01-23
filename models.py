@@ -1,3 +1,4 @@
+# TODO: Inheritance to avoid repetitions
 from pydantic import BaseModel, EmailStr, constr
 from datetime import datetime
 

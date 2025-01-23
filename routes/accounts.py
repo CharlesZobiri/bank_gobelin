@@ -1,11 +1,10 @@
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import db
 from models import AccountCreate, DepositBase,AccountBase,AccountsRecup
 from services.account_service import addMoney
 from services.transfer_service import transferMoney
-from utils import generate_unique_iban
+from utils import generate_iban
 from sqlalchemy import or_
 
 router = APIRouter()
@@ -29,8 +28,13 @@ def account_create(body: AccountCreate, db_session: Session = Depends(db.get_db)
     if account_exists:
         return {"error": "Account name already exists for this user"}
 
-    newIban = generate_unique_iban(db_session)
-    account_data = AccountBase(name=body.name, sold=0, iban=newIban)
+    new_iban: str
+    while True:
+        new_iban = generate_iban()
+        account_query = db_session.query(db.Account).where(db.Account.iban == new_iban)
+        if not db_session.scalars(account_query).first(): break
+    
+    account_data = AccountBase(name=body.name, sold=0, iban=new_iban)
     account = db.Account(name=account_data.name, sold=account_data.sold, userID=body.userID, iban=account_data.iban)
     db_session.add(account)
     db_session.commit()
@@ -96,7 +100,7 @@ def account_close(body: AccountCreate, db_session: Session = Depends(db.get_db))
         return {"error": "Account not found"}
     if account.isMain:
         return {"error": "Main account cannot be closed"}
-    pending_query = db_session.query(db.Transfer).where(or_(db.Transfer.sourceAccountID == account.id, db.Transfer.targetAccountID == account.id), db.Transfer.status == db.TransfertStatus.PENDING)
+    pending_query = db_session.query(db.Transfer).where(or_(db.Transfer.sourceAccountID == account.id, db.Transfer.targetAccountID == account.id), db.Transfer.status == db.TransferStatus.PENDING)
     pending_list = db_session.scalars(pending_query).all()
     if pending_list:
         return {"error": "Account has pending transfers"}

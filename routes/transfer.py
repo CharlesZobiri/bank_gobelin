@@ -89,14 +89,14 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
 
     
 @router.post("/transfer/canceled")
-def cancelledTransfert(body: TransferCancelled, db_session: Session = Depends(db.get_db)):
+def cancelledTransfer(body: TransferCancelled, db_session: Session = Depends(db.get_db)):
     transfer_query = db_session.query(db.Transfer).where(db.Transfer.id == body.transferID, db.Transfer.userID == body.userID)
     transfer = db_session.scalars(transfer_query).first()
     if transfer is None:
         return {"error": "Transfer not found"}
-    if transfer.status == db.TransfertStatus.COMPLETED:
+    if transfer.status == db.TransferStatus.COMPLETED:
         return {"error": "Transfer already completed"}
-    transfer.status = db.TransfertStatus.CANCELLED
+    transfer.status = db.TransferStatus.CANCELLED
     db_session.add(transfer)
     db_session.commit()
     return {"message": "Transfer cancelled"}

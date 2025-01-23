@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import db
 from models import UserBase, UserLogin
 import hashlib
-from utils import generate_unique_iban
+from utils import generate_iban
 
 router = APIRouter()
 
@@ -18,7 +18,14 @@ def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
     user = db.User(name= body.name, email=body.email, password=hash_password)
     db_session.add(user)
     db_session.commit()
-    mainAccount = db.Account(name="Principal", sold=100, userID=user.id, iban=generate_unique_iban(db_session), isMain=True)
+    
+    iban: str
+    while True:
+        iban = generate_iban()
+        account_query = db_session.query(db.Account).where(db.Account.iban == iban)
+        if not db_session.scalars(account_query).first(): break
+        
+    mainAccount = db.Account(name="Principal", sold=100, userID=user.id, iban=iban, isMain=True)
     db_session.add(mainAccount)
     db_session.commit()
 

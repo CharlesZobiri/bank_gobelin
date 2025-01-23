@@ -21,14 +21,14 @@ def processTransfers():
     
     min_timestamp = datetime.utcnow() - timedelta(seconds=10)
 
-    completedTransfert_query = (
+    completedTransfer_query = (
         db_session.query(db.Transfer)
         .filter(
-            db.Transfer.status == db.TransfertStatus.PENDING,
+            db.Transfer.status == db.TransferStatus.PENDING,
             db.Transfer.created_at <= min_timestamp  
         )
     )
-    transfers = db_session.scalars(completedTransfert_query).all()
+    transfers = db_session.scalars(completedTransfer_query).all()
 
     for transfer in transfers:
         sourceAccount = db_session.query(db.Account).filter(db.Account.id == transfer.sourceAccountID).first()
@@ -41,6 +41,6 @@ def processTransfers():
             db_session.add(targetAccount)
             db_session.commit()
 
-        transfer.status = db.TransfertStatus.COMPLETED
+        transfer.status = db.TransferStatus.COMPLETED
         db_session.add(transfer)
         db_session.commit()

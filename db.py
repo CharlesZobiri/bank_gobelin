@@ -26,7 +26,7 @@ class Deposit(SQLModel, table=True):
     accountID: int = Field(foreign_key="account.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class TransfertStatus(Enum):
+class TransferStatus(Enum):
     PENDING = "pending"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -38,7 +38,7 @@ class Transfer(SQLModel, table=True):
     sourceAccountID: int = Field(foreign_key="account.id")
     targetAccountID: int = Field(foreign_key="account.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    status: TransfertStatus = Field(default=TransfertStatus.PENDING)
+    status: TransferStatus = Field(default=TransferStatus.PENDING)
 
 class Beneficiary(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
