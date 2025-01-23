@@ -72,29 +72,38 @@ class AccountsRecup(BaseModel):
     userID: int
     
 
+@app.on_event("startup")
+@repeat_every(seconds=5)
+def processTransfers():
+    print("Processing transfers...")
+    db_session = next(db.get_db())
+    
+    min_timestamp = datetime.utcnow() - timedelta(seconds=10)
 
-# @app.on_event("startup")
-# @repeat_every(seconds=20)
-# def processTransfers():
-#     print("Processing transfers...")
-#     db_session = next(db.get_db())
-#     transfer = db.Transfer
+    completedTransfert_query = (
+        db_session.query(db.Transfer)
+        .filter(
+            db.Transfer.status == db.TransfertStatus.PENDING,
+            db.Transfer.created_at <= min_timestamp  
+        )
+    )
+    transfers = db_session.scalars(completedTransfert_query).all()
 
-#     completedTransfert_query = db_session.query(db.Transfer).where(db.Transfer.status == db.TransfertStatus.PENDING)
-#     transfers = db_session.scalars(completedTransfert_query).all()
-#     for transfer in transfers:
-#         sourceAccount = db_session.query(db.Account).filter(db.Account.id == transfer.sourceAccountID).first()
-#         targetAccount = db_session.query(db.Account).filter(db.Account.id == transfer.targetAccountID).first()
-#         if sourceAccount and targetAccount and sourceAccount.sold >= transfer.sold:
-#             sourceAccount.sold -= transfer.sold
-#             targetAccount.sold += transfer.sold
-#             db_session.add(sourceAccount)
-#             db_session.add(targetAccount)
-#             db_session.commit()
+    for transfer in transfers:
+        sourceAccount = db_session.query(db.Account).filter(db.Account.id == transfer.sourceAccountID).first()
+        targetAccount = db_session.query(db.Account).filter(db.Account.id == transfer.targetAccountID).first()
 
-#         transfer.status = db.TransfertStatus.COMPLETED
-#         db_session.add(transfer)
-#         db_session.commit()
+        if sourceAccount and targetAccount and sourceAccount.sold >= transfer.sold:
+            sourceAccount.sold -= transfer.sold
+            targetAccount.sold += transfer.sold
+            db_session.add(sourceAccount)
+            db_session.add(targetAccount)
+            db_session.commit()
+
+        transfer.status = db.TransfertStatus.COMPLETED
+        db_session.add(transfer)
+        db_session.commit()
+
     
 
 
@@ -355,7 +364,7 @@ def account_close(body: AccountCreate, db_session: Session = Depends(db.get_db))
 
 
     
-@app.post("/transfer/cancelled")
+@app.post("/transfer/canceled")
 def cancelledTransfert(body: TransferCancelled, db_session: Session = Depends(db.get_db)):
     transfer_query = db_session.query(db.Transfer).where(db.Transfer.id == body.transferID, db.Transfer.userID == body.userID)
     transfer = db_session.scalars(transfer_query).first()
