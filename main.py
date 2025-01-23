@@ -1,16 +1,14 @@
 import hashlib
 import db
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, constr
-from decimal import Decimal
 from fastapi import FastAPI, HTTPException, Depends
 import random
 import string
-from datetime import datetime
 from sqlalchemy import select, literal, union, or_
 from sqlalchemy.orm import Session, aliased
-from sqlalchemy import text
+from fastapi_utilities import repeat_every
+from datetime import datetime, timedelta
 
 
 app = FastAPI()
@@ -66,9 +64,46 @@ class TransferLogBase(BaseModel):
     name : str
     userID: int
 
+class TransferCancelled(BaseModel):
+    userID: int
+    transferID: int
+
 class AccountsRecup(BaseModel):
     userID: int
     
+
+
+# @app.on_event("startup")
+# @repeat_every(seconds=20)
+# def processTransfers():
+#     print("Processing transfers...")
+#     db_session = next(db.get_db())
+#     transfer = db.Transfer
+
+#     completedTransfert_query = db_session.query(db.Transfer).where(db.Transfer.status == db.TransfertStatus.PENDING)
+#     transfers = db_session.scalars(completedTransfert_query).all()
+#     for transfer in transfers:
+#         sourceAccount = db_session.query(db.Account).filter(db.Account.id == transfer.sourceAccountID).first()
+#         targetAccount = db_session.query(db.Account).filter(db.Account.id == transfer.targetAccountID).first()
+#         if sourceAccount and targetAccount and sourceAccount.sold >= transfer.sold:
+#             sourceAccount.sold -= transfer.sold
+#             targetAccount.sold += transfer.sold
+#             db_session.add(sourceAccount)
+#             db_session.add(targetAccount)
+#             db_session.commit()
+
+#         transfer.status = db.TransfertStatus.COMPLETED
+#         db_session.add(transfer)
+#         db_session.commit()
+    
+
+
+
+
+
+
+
+        
 
 
 def addMoney(amount: float, session: Session, account: db.Account):
@@ -100,8 +135,8 @@ def transferMoney(session: Session, amount: float, sourceAccount: db.Account, ta
         return("This IBAN does not exist")
     
     if isTransferPossible(amount, sourceAccount):
-        sourceAccount.sold = sourceAccount.sold - amount
-        targetAccount.sold = targetAccount.sold + amount
+        # sourceAccount.sold -= amount
+        # targetAccount.sold += amount
         transferData = db.Transfer(sold=amount, userID=sourceAccount.userID, sourceAccountID=sourceAccount.id, targetAccountID=targetAccount.id)
         session.add(transferData)
         session.commit()
@@ -113,10 +148,10 @@ db.create_db_and_tables()
 
 @app.get("/users/{user_id}")
 def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
-    user = db_session.query(db.User.email).filter(db.User.id == user_id).first()
+    user = db_session.query(db.User.name, db.User.email).filter(db.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"email": user.email}
+    return {"email": user.email, "name": user.name}
 
 
 @app.post("/auth/register")
@@ -130,6 +165,10 @@ def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
     user = db.User(name= body.name, email=body.email, password=hash_password)
     db_session.add(user)
     db_session.commit()
+    mainAccount = db.Account(name="Principal", sold=100, userID=user.id, iban=generate_unique_iban(db_session), isMain=True)
+    db_session.add(mainAccount)
+    db_session.commit()
+
     return {"message": "User registered"}
 
 
@@ -178,8 +217,10 @@ def account_get(body: AccountCreate, db_session: Session = Depends(db.get_db)):
     account = db_session.scalars(account_query).first()
     if account is None:
         return {"error": "Account not found"}
+    if account.isClosed:
+        return{"error": "Account is closed"}
 
-    return {"name": account.name, "sold": account.sold, "iban": account.iban}
+    return {"name": account.name, "sold": account.sold, "iban": account.iban, "created_at": account.created_at.strftime("%Y-%m-%d %H:%M:%S")}
 
 
 
@@ -189,6 +230,8 @@ def account_deposit(body: DepositBase, db_session: Session = Depends(db.get_db))
     account = db_session.scalars(account_query).first()
     if account is None:
         return {"error": "Account not found"}
+    if account.isClosed:
+        return("Invalid deposit, this account was closed")
 
     addMoney(body.sold, db_session, account)
     return {"message": "Money added to account"}
@@ -214,7 +257,14 @@ def account_transfer(body: TransferBase, db_session: Session = Depends(db.get_db
     account = db_session.scalars(account_query).first()
     if account is None:
         return {"error": "Account not found"}
-    
+    if account.isClosed:
+        return("Invalid transfer, the source account is closed")
+    ibanClosed_query = db_session.query(db.Account).where(db.Account.iban == body.iban)
+    accountClosed = db_session.scalars(ibanClosed_query).first()
+    if accountClosed.isClosed:
+        return("Invalid transfer, the target account is closed")
+
+
     message = transferMoney(db_session, body.sold, account, body.iban)
     return {"message": {message}}
 
@@ -274,6 +324,7 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
         "transactions": transaction_logs
     }
 
+
 @app.post("/accounts/")
 def accounts_get(body: AccountsRecup, db_session: Session = Depends(db.get_db)):
     user_query = db_session.query(db.User).where(db.User.id == body.userID)
@@ -281,7 +332,38 @@ def accounts_get(body: AccountsRecup, db_session: Session = Depends(db.get_db)):
     if user is None:
         return {"error": "User does not exist"}
     
-    account_query = db_session.query(db.Account).where(db.Account.userID == body.userID).order_by(db.Account.created_at.desc())
+    account_query = db_session.query(db.Account).where(db.Account.userID == body.userID, db.Account.isClosed==False).order_by(db.Account.created_at.desc())
     accounts = db_session.scalars(account_query).all()
     
-    return {"accounts": [{"name": account.name, "sold": account.sold, "iban": account.iban, "date": account.created_at.isoformat()} for account in accounts]}
+    return {"accounts": [{"name": account.name, "sold": account.sold, "iban": account.iban, "date": account.created_at.strftime("%Y-%m-%d %H:%M:%S")} for account in accounts]}
+
+
+@app.post("/account/close")
+def account_close(body: AccountCreate, db_session: Session = Depends(db.get_db)):
+    account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
+    account = db_session.scalars(account_query).first()
+    if account is None:
+        return {"error": "Account not found"}
+    if account.isMain:
+        return {"error": "Main account cannot be closed"}
+    account.isClosed = True
+    transferMoney(db_session, account.sold, account, db_session.query(db.Account).filter(db.Account.isMain == True).first().iban)
+
+    db_session.add(account)
+    db_session.commit()
+    return {"message": "Account closed"}
+
+
+    
+@app.post("/transfer/cancelled")
+def cancelledTransfert(body: TransferCancelled, db_session: Session = Depends(db.get_db)):
+    transfer_query = db_session.query(db.Transfer).where(db.Transfer.id == body.transferID, db.Transfer.userID == body.userID)
+    transfer = db_session.scalars(transfer_query).first()
+    if transfer is None:
+        return {"error": "Transfer not found"}
+    if transfer.status == db.TransfertStatus.COMPLETED:
+        return {"error": "Transfer already completed"}
+    transfer.status = db.TransfertStatus.CANCELLED
+    db_session.add(transfer)
+    db_session.commit()
+    return {"message": "Transfer cancelled"}

@@ -1,9 +1,11 @@
 from os import system
 from sqlmodel import Field, SQLModel, create_engine, Session, update
 from datetime import datetime
+from enum import Enum
 
 class User(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
     email: str = Field(index=True, unique=True, max_length=255)
     password: str = Field(max_length=255)
 
@@ -14,6 +16,8 @@ class Account(SQLModel, table=True):
     iban: str = Field(max_length=34, unique=True, index=True)
     name: str = Field(index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    isMain: bool = Field(default=False)
+    isClosed: bool = Field(default=False)   
 
 class Deposit(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -22,6 +26,11 @@ class Deposit(SQLModel, table=True):
     accountID: int = Field(foreign_key="account.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+class TransfertStatus(Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
 class Transfer(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     sold: float
@@ -29,6 +38,8 @@ class Transfer(SQLModel, table=True):
     sourceAccountID: int = Field(foreign_key="account.id")
     targetAccountID: int = Field(foreign_key="account.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    status: TransfertStatus = Field(default=TransfertStatus.PENDING)
+
 
 # system("del /Q database.db")
 sqlite_file_name = "database.db"
