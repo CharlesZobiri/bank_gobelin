@@ -355,6 +355,10 @@ def account_close(body: AccountCreate, db_session: Session = Depends(db.get_db))
         return {"error": "Account not found"}
     if account.isMain:
         return {"error": "Main account cannot be closed"}
+    pending_query = db_session.query(db.Transfer).where(or_(db.Transfer.sourceAccountID == account.id, db.Transfer.targetAccountID == account.id), db.Transfer.status == db.TransfertStatus.PENDING)
+    pending_list = db_session.scalars(pending_query).all()
+    if pending_list:
+        return {"error": "Account has pending transfers"}
     account.isClosed = True
     transferMoney(db_session, account.sold, account, db_session.query(db.Account).filter(db.Account.isMain == True).first().iban)
 
