@@ -47,11 +47,7 @@ class Beneficiary(SQLModel, table=True):
     userID: int = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
-connect_args = {"check_same_thread": False}
-engine = create_engine(sqlite_url, connect_args=connect_args)
+engine = create_engine("sqlite:///database.db", connect_args={"check_same_thread": False})
 
 def create_session():
     return Session(engine)

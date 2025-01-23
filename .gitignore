@@ -405,3 +405,6 @@ FodyWeavers.xsd
 #.venv Folder virtual environment
 .venv
 .venv/
+
+# Custom
+*.db

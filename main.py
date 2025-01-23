@@ -11,14 +11,6 @@ app.include_router(accounts_router)
 app.include_router(transfer_router)
 app.include_router(beneficiaries_router)
 
-
-app = FastAPI()
-
-app.include_router(auth_router)
-app.include_router(accounts_router)
-app.include_router(transfer_router)
-app.include_router(beneficiaries_router)
-
 db.create_db_and_tables()
 
 @app.on_event("startup")
