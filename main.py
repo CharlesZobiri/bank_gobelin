@@ -240,7 +240,6 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
         )
         .join(db.Account, db.Transfer.sourceAccountID == db.Account.id)
         .join(TargetAccount, db.Transfer.targetAccountID == TargetAccount.id)
-        .where(db.Transfer.sourceAccountID == account.id)
     )
     
     deposit_query = (
