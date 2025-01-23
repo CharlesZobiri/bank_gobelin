@@ -9,6 +9,7 @@ from sqlalchemy import select, literal, union, or_
 from sqlalchemy.orm import Session, aliased
 from fastapi_utilities import repeat_every
 from datetime import datetime, timedelta
+from typing import List
 
 
 app = FastAPI()
@@ -72,6 +73,17 @@ class TransferCancelled(BaseModel):
 class AccountsRecup(BaseModel):
     userID: int
     
+class BeneficiaryBase(BaseModel):
+    id: int
+    name: str
+    iban: str
+    created_at : datetime = datetime.utcnow()
+
+class BeneficiaryCreate(BaseModel):
+    name: str
+    iban: str
+    userID: int
+
 
 @app.on_event("startup")
 @repeat_every(seconds=5)
@@ -107,15 +119,6 @@ def processTransfers():
 
     
 
-
-
-
-
-
-
-        
-
-
 def addMoney(amount: float, session: Session, account: db.Account):
     if amount > 0:
         account.sold = account.sold + amount
@@ -136,13 +139,13 @@ def isTransferPossible(amount: float, firstAccount: db.Account):
 
 def transferMoney(session: Session, amount: float, sourceAccount: db.Account, targetIban: str):
     if sourceAccount.iban == targetIban:
-        return{"error": "Invalid transfer, the accounts are the same"}
+        return"error : Invalid transfer, the accounts are the same"
     if amount <= 0:
-        return{"error": "Invalid amount, must be superior to 0"}
+        return"error : Invalid amount, must be superior to 0"
 
     targetAccount = getAccount(session, targetIban)
     if targetAccount is None:
-        return{"error": "This IBAN does not exist"}
+        return"error : This IBAN does not exist"
     
     if isTransferPossible(amount, sourceAccount):
         # sourceAccount.sold -= amount
@@ -150,9 +153,9 @@ def transferMoney(session: Session, amount: float, sourceAccount: db.Account, ta
         transferData = db.Transfer(sold=amount, userID=sourceAccount.userID, sourceAccountID=sourceAccount.id, targetAccountID=targetAccount.id)
         session.add(transferData)
         session.commit()
-        return{"message": "Transfer done"}
+        return "Transfer done"
     else:
-        return{"error": "This account isn't sold enough to make the transfer"}
+        return"error : This account isn't sold enough to make the transfer"
 
 db.create_db_and_tables()
 
@@ -402,3 +405,48 @@ def transfer_info(body: TransferCancelled, db_session: Session = Depends(db.get_
         "target_account": target_account.name if target_account else "Unknown",
         "status": transfer.status.value
     }
+
+
+@app.post("/beneficiary/add")
+def add_beneficiary(body: BeneficiaryCreate, db_session: Session = Depends(db.get_db)):
+   
+    existing_beneficiary = db_session.query(db.Beneficiary).filter(
+        db.Beneficiary.userID == body.userID,
+        db.Beneficiary.iban == body.iban
+    ).first()
+    
+    if existing_beneficiary:
+        raise HTTPException(status_code=400, detail="Ce bénéficiaire existe déjà")
+    
+    user_account = db_session.query(db.Account).filter(
+        db.Account.userID == body.userID,
+        db.Account.iban == body.iban
+    ).first()
+    
+    if user_account:
+        raise HTTPException(status_code=400, detail="Le bénéficiaire ne peut pas être un de vos propres comptes")
+    
+
+    beneficiary_account = db_session.query(db.Account).filter(
+        db.Account.iban == body.iban
+    ).first()
+    
+    if not beneficiary_account:
+        raise HTTPException(status_code=400, detail="Le compte bénéficiaire n'existe pas")
+    
+    
+    new_beneficiary = db.Beneficiary(
+        name=body.name,
+        iban=body.iban,
+        userID=body.userID
+    )
+    
+    db_session.add(new_beneficiary)
+    db_session.commit()
+    
+    return {"message": "Bénéficiaire ajouté avec succès"}
+
+@app.get("/beneficiaries/{user_id}", response_model=List[BeneficiaryBase])
+def get_beneficiaries(user_id: int, db_session: Session = Depends(db.get_db)):
+    beneficiaries = db_session.query(db.Beneficiary).filter(db.Beneficiary.userID == user_id).all()
+    return beneficiaries
