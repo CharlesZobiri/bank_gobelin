@@ -64,6 +64,7 @@ class TransferLogBase(BaseModel):
     name : str
     userID: int
 
+
 class TransferCancelled(BaseModel):
     userID: int
     transferID: int
@@ -285,7 +286,6 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
     if account is None:
         return {"error": "Account not found"}
 
-    
     TargetAccount = aliased(db.Account)
     
     transfer_query = (
@@ -294,7 +294,8 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
             db.Transfer.created_at,
             db.Account.name.label('source_account'),
             TargetAccount.name.label('target_account'),
-            literal('transfer').label('type')
+            literal('transfer').label('type'),
+            db.Transfer.status
         )
         .join(db.Account, db.Transfer.sourceAccountID == db.Account.id)
         .join(TargetAccount, db.Transfer.targetAccountID == TargetAccount.id)
@@ -307,7 +308,8 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
             db.Deposit.created_at,
             db.Account.name.label('source_account'),
             literal(None).label('target_account'),
-            literal('deposit').label('type')
+            literal('deposit').label('type'),
+            literal(None).label('status')
         )
         .join(db.Account, db.Deposit.accountID == db.Account.id)
         .where(db.Deposit.accountID == account.id)
@@ -317,16 +319,19 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
     results = db_session.exec(combined_query).all()
     sorted_results = sorted(results, key=lambda x: x.created_at, reverse=True)
     
-    transaction_logs = [
-        {
+    transaction_logs = []
+    for result in sorted_results:
+        log = {
             "amount": result.sold,
             "date": result.created_at.strftime("%Y-%m-%d %H:%M:%S") if result.created_at else None,
             "from_account": result.source_account,
-            "to_account": result.target_account,
             "type": result.type
         }
-        for result in sorted_results
-    ]
+        if result.type == 'transfer':
+            log["to_account"] = result.target_account
+            log["status"] = result.status.value if result.status else None
+        
+        transaction_logs.append(log)
     
     return {
         "account_name": account.name,
@@ -380,3 +385,20 @@ def cancelledTransfert(body: TransferCancelled, db_session: Session = Depends(db
     db_session.add(transfer)
     db_session.commit()
     return {"message": "Transfer cancelled"}
+
+@app.post("/transfer/info")
+def transfer_info(body: TransferCancelled, db_session: Session = Depends(db.get_db)):
+    transfer_query = db_session.query(db.Transfer).where(db.Transfer.id == body.transferID, db.Transfer.userID == body.userID)
+    transfer = db_session.scalars(transfer_query).first()
+    if transfer is None:
+        return {"error": "Transfer not found"}
+    
+    source_account = db_session.query(db.Account).filter(db.Account.id == transfer.sourceAccountID).first()
+    target_account = db_session.query(db.Account).filter(db.Account.id == transfer.targetAccountID).first()
+    
+    return {
+        "amount": transfer.sold,
+        "source_account": source_account.name if source_account else "Unknown",
+        "target_account": target_account.name if target_account else "Unknown",
+        "status": transfer.status.value
+    }
