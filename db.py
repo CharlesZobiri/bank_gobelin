@@ -43,7 +43,7 @@ class Transfer(SQLModel, table=True):
 class Beneficiary(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True)
-    iban: str = Field(max_length=34, unique=True, index=True)
+    iban: str = Field(max_length=34, index=True)
     userID: int = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
