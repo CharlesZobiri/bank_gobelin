@@ -135,13 +135,13 @@ def isTransferPossible(amount: float, firstAccount: db.Account):
 
 def transferMoney(session: Session, amount: float, sourceAccount: db.Account, targetIban: str):
     if sourceAccount.iban == targetIban:
-        return("Invalid transfer, the accounts are the same")
+        return{"error": "Invalid transfer, the accounts are the same"}
     if amount <= 0:
-        return("Invalid amount, must be superior to 0")
+        return{"error": "Invalid amount, must be superior to 0"}
 
     targetAccount = getAccount(session, targetIban)
     if targetAccount is None:
-        return("This IBAN does not exist")
+        return{"error": "This IBAN does not exist"}
     
     if isTransferPossible(amount, sourceAccount):
         # sourceAccount.sold -= amount
@@ -149,9 +149,9 @@ def transferMoney(session: Session, amount: float, sourceAccount: db.Account, ta
         transferData = db.Transfer(sold=amount, userID=sourceAccount.userID, sourceAccountID=sourceAccount.id, targetAccountID=targetAccount.id)
         session.add(transferData)
         session.commit()
-        return("Transfer done")
+        return{"message": "Transfer done"}
     else:
-        return("This account isn't sold enough to make the transfer")
+        return{"error": "This account isn't sold enough to make the transfer"}
 
 db.create_db_and_tables()
 
@@ -240,7 +240,7 @@ def account_deposit(body: DepositBase, db_session: Session = Depends(db.get_db))
     if account is None:
         return {"error": "Account not found"}
     if account.isClosed:
-        return("Invalid deposit, this account was closed")
+        return{"error": "Invalid deposit, this account was closed"}
 
     addMoney(body.sold, db_session, account)
     return {"message": "Money added to account"}
@@ -267,11 +267,11 @@ def account_transfer(body: TransferBase, db_session: Session = Depends(db.get_db
     if account is None:
         return {"error": "Account not found"}
     if account.isClosed:
-        return("Invalid transfer, the source account is closed")
+        return{"error": "Invalid transfer, the source account is closed"}
     ibanClosed_query = db_session.query(db.Account).where(db.Account.iban == body.iban)
     accountClosed = db_session.scalars(ibanClosed_query).first()
     if accountClosed.isClosed:
-        return("Invalid transfer, the target account is closed")
+        return{"error": "Invalid transfer, the target account is closed"}
 
 
     message = transferMoney(db_session, body.sold, account, body.iban)
