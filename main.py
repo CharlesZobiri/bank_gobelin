@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Depends
 import random
 import string
 from datetime import datetime
-from sqlalchemy import select, literal, union
+from sqlalchemy import select, literal, union, or_
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import text
 
@@ -110,14 +110,13 @@ def transferMoney(session: Session, amount: float, sourceAccount: db.Account, ta
         return("This account isn't sold enough to make the transfer")
 
 db.create_db_and_tables()
-session = db.create_session()
 
 @app.get("/users/{user_id}")
 def read_user(user_id: int, db_session: Session = Depends(db.get_db)):
-    user = db_session.query(db.User.name, db.User.email).filter(db.User.id == user_id).first()
+    user = db_session.query(db.User.email).filter(db.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"name": user.name, "email": user.email}
+    return {"email": user.email}
 
 
 @app.post("/auth/register")
@@ -129,8 +128,8 @@ def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
     
     hash_password = hashlib.sha256(body.password.encode()).hexdigest()
     user = db.User(name= body.name, email=body.email, password=hash_password)
-    session.add(user)
-    session.commit()
+    db_session.add(user)
+    db_session.commit()
     return {"message": "User registered"}
 
 
@@ -148,7 +147,7 @@ def generate_unique_iban(db_session: Session):
     while True:
         iban = ''.join(random.choices(string.digits, k=34))
         account_query = db_session.query(db.Account).where(db.Account.iban == iban)
-        account_exists = session.scalars(account_query).first()
+        account_exists = db_session.scalars(account_query).first()
         if not account_exists:
             return iban
         
@@ -156,27 +155,27 @@ def generate_unique_iban(db_session: Session):
 @app.post("/account/create")
 def account_create(body: AccountCreate, db_session: Session = Depends(db.get_db)):
     user_query = db_session.query(db.User).where(db.User.id == body.userID)
-    user_exists = session.scalars(user_query).first()
+    user_exists = db_session.scalars(user_query).first()
     if not user_exists:
         return {"error": "User does not exist"}  
       
     account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
-    account_exists = session.scalars(account_query).first()
+    account_exists = db_session.scalars(account_query).first()
     if account_exists:
         return {"error": "Account name already exists for this user"}
 
     newIban = generate_unique_iban(db_session)
     account_data = AccountBase(name=body.name, sold=0, iban=newIban)
     account = db.Account(name=account_data.name, sold=account_data.sold, userID=body.userID, iban=account_data.iban)
-    session.add(account)
-    session.commit()
+    db_session.add(account)
+    db_session.commit()
     return {"message": "Account Opened"}
 
 
 @app.post("/account/infos")
 def account_get(body: AccountCreate, db_session: Session = Depends(db.get_db)):
     account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
-    account = session.scalars(account_query).first()
+    account = db_session.scalars(account_query).first()
     if account is None:
         return {"error": "Account not found"}
 
@@ -196,7 +195,7 @@ def account_deposit(body: DepositBase, db_session: Session = Depends(db.get_db))
 
 
 
-@app.get('/account/deposit_logs')
+@app.post('/account/deposit_logs')
 def account_deposit_logs(body: AccountCreate, db_session: Session = Depends(db.get_db)):
     account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
     account = db_session.scalars(account_query).first()
@@ -240,6 +239,7 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
         )
         .join(db.Account, db.Transfer.sourceAccountID == db.Account.id)
         .join(TargetAccount, db.Transfer.targetAccountID == TargetAccount.id)
+        .where(or_(db.Transfer.sourceAccountID == account.id, db.Transfer.targetAccountID == account.id))
     )
     
     deposit_query = (
