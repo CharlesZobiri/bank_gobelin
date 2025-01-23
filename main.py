@@ -7,11 +7,55 @@ import random
 import string
 from sqlalchemy import select, literal, union, or_
 from sqlalchemy.orm import Session, aliased
-from fastapi_utilities import repeat_every
 from datetime import datetime, timedelta
+
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer
+from typing import Optional
 
 
 app = FastAPI()
+
+
+
+# Clé secrète pour signer les tokens
+SECRET_KEY = "YOUR_SECRET_KEY"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# OAuth2PasswordBearer pour récupérer le token depuis les en-têtes des requêtes
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Génère un token JWT."""
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = Depends(db.get_db)):
+    """Vérifie le token et retourne l'utilisateur actuel."""
+    payload = verify_token(token)
+    email = payload.get("sub")
+    if email is None:
+        raise HTTPException(status_code=401, detail="Utilisateur non authentifié")
+
+    user = db_session.query(db.User).where(db.User.email == email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    return user
+
+
+def verify_token(token: str):
+    """Décode et vérifie un token JWT."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload  # Retourne les données contenues dans le token
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+
+
 
 class UserBase(BaseModel):
     name : str
@@ -174,12 +218,16 @@ def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
 
 @app.post("/auth/login")
 def user_login(body: UserLogin, db_session: Session = Depends(db.get_db)):
-    hash_password=hashlib.sha256(body.password.encode()).hexdigest()
+    hash_password = hashlib.sha256(body.password.encode()).hexdigest()
     user_query = db_session.query(db.User).where(db.User.email == body.email, db.User.password == hash_password)
-    user_exists = db_session.scalars(user_query).first()
-    if not user_exists:
-        return {"error": "Invalid credentials"}
-    return {"message": "User logged in"}
+    user = db_session.scalars(user_query).first()
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Identifiants invalides")
+
+    # Générer un token JWT
+    access_token = create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 def generate_unique_iban(db_session: Session):
