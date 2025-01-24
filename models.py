@@ -1,6 +1,6 @@
 # TODO: Inheritance to avoid repetitions
 from pydantic import BaseModel, EmailStr, constr
-from datetime import datetime
+from datetime import datetime, timezone
 
 class UserBase(BaseModel):
     name : str
@@ -63,8 +63,15 @@ class AccountsRecup(BaseModel):
 class BeneficiaryBase(BaseModel):
     id: int
     name: str
-    iban: str
-    created_at : datetime = datetime.utcnow()
+    iban : str
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+        json_encoders = {
+            datetime: lambda v: v.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
 
 class BeneficiaryCreate(BaseModel):
     name: str

@@ -15,7 +15,7 @@ def add_beneficiary(body: BeneficiaryCreate, db_session: Session = Depends(db.ge
     ).first()
     
     if existing_beneficiary:
-        raise HTTPException(status_code=400, detail="Ce bénéficiaire existe déjà")
+        raise HTTPException(status_code=400, detail="This beneficiary already exists")
     
     user_account = db_session.query(db.Account).filter(
         db.Account.userID == body.userID,
@@ -23,7 +23,7 @@ def add_beneficiary(body: BeneficiaryCreate, db_session: Session = Depends(db.ge
     ).first()
     
     if user_account:
-        raise HTTPException(status_code=400, detail="Le bénéficiaire ne peut pas être un de vos propres comptes")
+        raise HTTPException(status_code=400, detail="The beneficiary account is the same as the user account")
     
 
     beneficiary_account = db_session.query(db.Account).filter(
@@ -31,7 +31,7 @@ def add_beneficiary(body: BeneficiaryCreate, db_session: Session = Depends(db.ge
     ).first()
     
     if not beneficiary_account:
-        raise HTTPException(status_code=400, detail="Le compte bénéficiaire n'existe pas")
+        raise HTTPException(status_code=400, detail="Beneficiary acccount not found")
     
     
     new_beneficiary = db.Beneficiary(
@@ -43,7 +43,7 @@ def add_beneficiary(body: BeneficiaryCreate, db_session: Session = Depends(db.ge
     db_session.add(new_beneficiary)
     db_session.commit()
     
-    return {"message": "Bénéficiaire ajouté avec succès"}
+    return {"message": "Beneficiary added successfully"}
 
 @router.get("/beneficiaries/{user_id}", response_model=List[BeneficiaryBase])
 def get_beneficiaries(user_id: int, db_session: Session = Depends(db.get_db)):

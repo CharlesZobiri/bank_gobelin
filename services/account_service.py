@@ -9,9 +9,10 @@ def addMoney(amount: float, session: Session, account: db.Account):
         session.add(depotData)
         session.add(account)
         session.commit()
+        return "Money added successfully to account"
         
     else:
-        print("Invalid amount, must be superior to 0")
+        return "Invalid amount, must be superior to 0"
 
 def getAccount(session: Session, iban: str):
     account_query = select(db.Account).where(db.Account.iban == iban)

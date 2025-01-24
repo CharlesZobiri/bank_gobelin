@@ -62,8 +62,8 @@ def account_deposit(body: DepositBase, db_session: Session = Depends(db.get_db))
     if account.isClosed:
         return{"error": "Invalid deposit, this account was closed"}
 
-    addMoney(body.sold, db_session, account)
-    return {"message": "Money added to account"}
+    message = addMoney(body.sold, db_session, account)
+    return {"message": {message}}
 
 
 
