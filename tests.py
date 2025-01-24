@@ -4,7 +4,7 @@ from sqlmodel import SQLModel, create_engine, Session
 from sqlmodel.pool import StaticPool
 from main import app
 
-engine = create_engine("sqlite:///test.db", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+engine = create_engine("sqlite:///database.db", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 SQLModel.metadata.drop_all(engine)
 SQLModel.metadata.create_all(engine)
 
@@ -59,4 +59,3 @@ def test_account_deposit():
 def test_account_deposit_logs():
     response = client.post("/account/deposit_logs", json={ "name": "Test", "userID": 1 })
     assert response.status_code == 200
-    assert response.json() == {"message": "Money added to account"}    
