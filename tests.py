@@ -21,7 +21,10 @@ def test_auth_register():
 def test_auth_login():
     response = client.post("/auth/login", json={ "email": "test@example.com", "password": "thisisatest" })
     assert response.status_code == 200
-    assert response.json() == { "message": "User logged in" }
+    json_response = response.json()
+    assert json_response["message"] == "User logged in"
+    assert json_response["access_token"] is not None
+    assert json_response["token_type"] == "bearer"
         
 def test_get_user():
     response = client.get("/users/1")
@@ -119,7 +122,6 @@ def test_benificiaries_add():
     
 def test_get_beneficiaries():
     response = client.get("/beneficiaries/1")
-    pprint(vars(response))
     assert response.status_code == 200
     
     json_response = response.json()
