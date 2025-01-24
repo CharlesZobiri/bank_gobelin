@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, aliased
 
 router = APIRouter()
 
-
 @router.post("/account/transfer")
 def account_transfer(body: TransferBase, db_session: Session = Depends(db.get_db)):
     account_query = db_session.query(db.Account).where(db.Account.name == body.name, db.Account.userID == body.userID)
@@ -22,10 +21,8 @@ def account_transfer(body: TransferBase, db_session: Session = Depends(db.get_db
     if accountClosed.isClosed:
         return{"error": "Invalid transfer, the target account is closed"}
 
-
     message = transferMoney(db_session, body.sold, account, body.iban)
     return {"message": {message}}
-
 
 @router.post('/account/transaction_logs')
 def account_transaction_logs(body: TransferLogBase, db_session: Session = Depends(db.get_db)):
@@ -85,8 +82,6 @@ def account_transaction_logs(body: TransferLogBase, db_session: Session = Depend
         "account_name": account.name,
         "transactions": transaction_logs
     }
-
-
     
 @router.post("/transfer/canceled")
 def cancelledTransfer(body: TransferCancelled, db_session: Session = Depends(db.get_db)):
@@ -117,3 +112,13 @@ def transfer_info(body: TransferCancelled, db_session: Session = Depends(db.get_
         "target_account": target_account.name if target_account else "Unknown",
         "status": transfer.status.value
     }
+
+@router.post("/transfer/last")
+def get_last_transfer(db_session: Session = Depends(db.get_db)):
+    last_transfer = db_session.query(db.Transfer).order_by(db.Transfer.created_at.desc()).first()
+
+    if last_transfer is None:
+        return {"error": "No transfers found"}
+
+    return {"id": last_transfer.id}
+

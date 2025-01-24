@@ -53,7 +53,6 @@ class TransferLogBase(BaseModel):
     name : str
     userID: int
 
-
 class TransferCancelled(BaseModel):
     userID: int
     transferID: int
