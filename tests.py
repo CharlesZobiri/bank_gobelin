@@ -51,7 +51,7 @@ def test_account_get():
 def test_account_deposit():
     response = client.post("/account/deposit", json={ "name": "Test", "userID": 1, "sold": 100 })
     assert response.status_code == 200
-    assert response.json() == {"message": "Money added to account"}
+    assert response.json() == {'message': ['Money added successfully to account']}
     
 def test_account_deposit_logs():
     response = client.post("/account/deposit_logs", json={ "name": "Test", "userID": 1 })
@@ -118,7 +118,7 @@ def test_benificiaries_add():
     new_account = client.post("/account/infos", json={ "name": "Principal", "userID": 2 }).json()
     response = client.post("/beneficiary/add", json={ "name": "Titouan", "iban": new_account["iban"], "userID": 1})
     assert response.status_code == 200
-    assert response.json() == {"message": "Bénéficiaire ajouté avec succès"}
+    assert response.json() == {"message": "Beneficiary added successfully"}
     
 def test_get_beneficiaries():
     response = client.get("/beneficiaries/1")
