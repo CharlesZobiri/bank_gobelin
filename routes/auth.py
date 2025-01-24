@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 import db
 from models import UserBase, UserLogin
 import hashlib
-from utils import generate_iban
-
+from utils import generate_iban, create_access_token, oauth2_scheme
 router = APIRouter()
+
 
 @router.post("/auth/register")
 def user_create(body: UserBase, db_session: Session = Depends(db.get_db)):
@@ -39,4 +39,11 @@ def user_login(body: UserLogin, db_session: Session = Depends(db.get_db)):
     user_exists = db_session.scalars(user_query).first()
     if not user_exists:
         return {"error": "Invalid credentials"}
-    return {"message": "User logged in"}
+    access_token = create_access_token(data={"sub": user_exists.email})
+    return {"message": "User logged in", "access_token": access_token, "token_type": "bearer"}
+
+
+    
+
+
+
